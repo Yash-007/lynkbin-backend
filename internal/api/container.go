@@ -8,6 +8,7 @@ import (
 	"module/lynkbin/internal/repo"
 	"module/lynkbin/internal/services/posts"
 	"module/lynkbin/internal/services/users"
+	"os"
 )
 
 type Container struct {
@@ -18,7 +19,7 @@ type Container struct {
 
 func NewContainer() *Container {
 	// dbUrl := "postgresql://postgres:postgres@localhost:5432/lynkbin"
-	dbUrl := "postgresql://neondb_owner:npg_1I5OCFYzPJvZ@ep-quiet-glade-adyq12br-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+	dbUrl := os.Getenv("DB_URL")
 	database := db.ConnectDB(dbUrl)
 
 	// Run migrations

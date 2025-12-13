@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"module/lynkbin/internal/api"
+	"module/lynkbin/internal/utilities"
 
 	"github.com/gin-contrib/cors"
 	"github.com/go-telegram/bot"
@@ -90,6 +91,9 @@ func main() {
 		AllowMethods: []string{"*"},
 		AllowHeaders: []string{"*"},
 	}))
+	server.GET("/", func(ctx *gin.Context) {
+		utilities.Response(ctx, 200, true, nil, "server is running fine")
+	})
 
 	container := api.NewContainer()
 	if container == nil {
