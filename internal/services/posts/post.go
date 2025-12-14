@@ -189,6 +189,7 @@ func (s *PostService) CreatePost(ctx *gin.Context) {
 		utilities.Response(ctx, 400, false, nil, "Invalid request body")
 		return
 	}
+	userPost := ""
 	if request.IsUrl {
 		request.Url, err = url.PathUnescape(request.Url)
 		if err != nil {
@@ -202,14 +203,13 @@ func (s *PostService) CreatePost(ctx *gin.Context) {
 			utilities.Response(ctx, 400, false, nil, "Invalid request body")
 			return
 		}
+		userPost = request.Url
 	} else if strings.TrimSpace(request.Notes) == "" {
 		utilities.Response(ctx, 400, false, nil, "Notes are required")
 		return
-	}
-
-	var userPost string
-	if request.IsUrl {
-		userPost = request.Url
+	} else if len(strings.TrimSpace(request.Notes)) > 3500 {
+		utilities.Response(ctx, 400, false, nil, "maximum notes length is 3500 characters")
+		return
 	} else {
 		userPost = request.Notes
 	}
