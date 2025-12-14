@@ -3,6 +3,7 @@ package gemini
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"google.golang.org/genai"
 )
