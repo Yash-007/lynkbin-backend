@@ -88,7 +88,8 @@ func (s *PostService) ExtractPostDetails(ctx *gin.Context, userPost string, plat
 	var scrapedPost scraper.ScrapedPost
 	var err error
 	if platform == "linkedin" {
-		scrapedPost, err = scraper.ScrapeLinkedInPost(userPost, "socks5://10.101.116.69:1088")
+		// scrapedPost, err = scraper.ScrapeLinkedInPost(userPost, "socks5://10.101.116.69:1088")
+		scrapedPost, err = scraper.ScrapeLinkedInPost(userPost, "")
 		if err != nil {
 			return models.Post{}, err
 		}
@@ -98,7 +99,8 @@ func (s *PostService) ExtractPostDetails(ctx *gin.Context, userPost string, plat
 			return models.Post{}, err
 		}
 	} else if platform == "x" {
-		scrapedPost, err = scraper.ScrapeXPost(userPost, "socks5://10.101.116.69:1088")
+		// scrapedPost, err = scraper.ScrapeXPost(userPost, "socks5://10.101.116.69:1088")
+		scrapedPost, err = scraper.ScrapeXPost(userPost, "")
 		if err != nil {
 			return models.Post{}, err
 		}
@@ -107,7 +109,8 @@ func (s *PostService) ExtractPostDetails(ctx *gin.Context, userPost string, plat
 			return models.Post{}, err
 		}
 	} else if platform == "reddit" {
-		scrapedPost, err = scraper.ScrapeRedditPost(userPost, "socks5://10.101.116.69:1088")
+		// scrapedPost, err = scraper.ScrapeRedditPost(userPost, "socks5://10.101.116.69:1088")
+		scrapedPost, err = scraper.ScrapeRedditPost(userPost, "")
 		if err != nil {
 			return models.Post{}, err
 		}
