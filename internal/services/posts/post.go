@@ -45,6 +45,7 @@ func (s *PostService) ExtractPostPlatform(userPost string, isUrl bool) (string, 
 func (s *PostService) SummarizePost(ctx *gin.Context, content string, userTags []string) (dto.SummarizePostResponse, error) {
 	allTags, err := s.postRepo.GetAllTags()
 	if err != nil {
+		fmt.Println("Error getting all tags: ", err)
 		return dto.SummarizePostResponse{}, err
 	}
 	tags := make([]string, len(allTags))
@@ -55,6 +56,7 @@ func (s *PostService) SummarizePost(ctx *gin.Context, content string, userTags [
 
 	allCategories, err := s.postRepo.GetAllCategories()
 	if err != nil {
+		fmt.Println("Error getting all categories: ", err)
 		return dto.SummarizePostResponse{}, err
 	}
 	categories := make([]string, len(allCategories))
@@ -67,6 +69,7 @@ func (s *PostService) SummarizePost(ctx *gin.Context, content string, userTags [
 	prompt := utilities.GenerateCategorizationPrompt(content, tagString, categoryString, userTagsString)
 	summary, err := s.geminiClient.GenerateContent(context.Background(), prompt)
 	if err != nil {
+		fmt.Println("Error generating content: ", err)
 		return dto.SummarizePostResponse{}, err
 	}
 	summary = utilities.CleanJSONResponse(summary)
@@ -91,31 +94,37 @@ func (s *PostService) ExtractPostDetails(ctx *gin.Context, userPost string, plat
 		// scrapedPost, err = scraper.ScrapeLinkedInPost(userPost, "socks5://10.101.116.69:1088")
 		scrapedPost, err = scraper.ScrapeLinkedInPost(userPost, "")
 		if err != nil {
+			fmt.Println("Error scraping LinkedIn post: ", err)
 			return models.Post{}, err
 		}
 
 		summary, err = s.SummarizePost(ctx, scrapedPost.Content, tags)
 		if err != nil {
+			fmt.Println("Error summarizing LinkedIn post: ", err)
 			return models.Post{}, err
 		}
 	} else if platform == "x" {
 		// scrapedPost, err = scraper.ScrapeXPost(userPost, "socks5://10.101.116.69:1088")
 		scrapedPost, err = scraper.ScrapeXPost(userPost, "")
 		if err != nil {
+			fmt.Println("Error scraping X post: ", err)
 			return models.Post{}, err
 		}
 		summary, err = s.SummarizePost(ctx, scrapedPost.Content, tags)
 		if err != nil {
+			fmt.Println("Error summarizing X post: ", err)
 			return models.Post{}, err
 		}
 	} else if platform == "reddit" {
 		// scrapedPost, err = scraper.ScrapeRedditPost(userPost, "socks5://10.101.116.69:1088")
 		scrapedPost, err = scraper.ScrapeRedditPost(userPost, "")
 		if err != nil {
+			fmt.Println("Error scraping Reddit post: ", err)
 			return models.Post{}, err
 		}
 		summary, err = s.SummarizePost(ctx, scrapedPost.Content, tags)
 		if err != nil {
+			fmt.Println("Error summarizing Reddit post: ", err)
 			return models.Post{}, err
 		}
 	} else if platform == "others" {
@@ -123,6 +132,7 @@ func (s *PostService) ExtractPostDetails(ctx *gin.Context, userPost string, plat
 	} else if platform == "notes" {
 		summary, err = s.SummarizePost(ctx, userPost, tags)
 		if err != nil {
+			fmt.Println("Error summarizing notes: ", err)
 			return models.Post{}, err
 		}
 	} else {
@@ -146,22 +156,26 @@ func (s *PostService) UpdateAuthorTagsCategories(ctx *gin.Context, post models.P
 	userId := ctx.GetInt64("user_id")
 	exists, err := s.postRepo.CheckUserAuthorExists(userId, post.Author, post.Platform)
 	if err != nil {
+		fmt.Println("Error checking user author exists: ", err)
 		return err
 	}
 	if !exists {
 		err = s.postRepo.AddUserAuthor(userId, post.Author, post.Platform)
 		if err != nil {
+			fmt.Println("Error adding user author: ", err)
 			return err
 		}
 	}
 
 	err = s.postRepo.UpdateUserTags(userId, post.Platform, post.Tags)
 	if err != nil {
+		fmt.Println("Error updating user tags: ", err)
 		return err
 	}
 
 	err = s.postRepo.UpdateUserCategory(userId, post.Platform, post.Category)
 	if err != nil {
+		fmt.Println("Error updating user category: ", err)
 		return err
 	}
 	return nil
@@ -171,12 +185,14 @@ func (s *PostService) CreatePost(ctx *gin.Context) {
 	var request dto.CreatePostRequest
 	err := ctx.ShouldBindBodyWithJSON(&request)
 	if err != nil {
+		fmt.Println("Error binding request body: ", err)
 		utilities.Response(ctx, 400, false, nil, "Invalid request body")
 		return
 	}
 	if request.IsUrl {
 		request.Url, err = url.PathUnescape(request.Url)
 		if err != nil {
+			fmt.Println("Error unescaping URL: ", err)
 			utilities.Response(ctx, 400, false, nil, "Invalid url")
 			return
 		}
@@ -200,24 +216,28 @@ func (s *PostService) CreatePost(ctx *gin.Context) {
 
 	platform, err := s.ExtractPostPlatform(userPost, request.IsUrl)
 	if err != nil {
+		fmt.Println("Error extracting post platform: ", err)
 		utilities.Response(ctx, 400, false, nil, "Invalid url")
 		return
 	}
 
 	post, err := s.ExtractPostDetails(ctx, userPost, platform, request.Tags)
 	if err != nil {
+		fmt.Println("Error extracting post details: ", err)
 		utilities.Response(ctx, 400, false, nil, "Failed to extract post details")
 		return
 	}
 
 	err = s.UpdateAuthorTagsCategories(ctx, post)
 	if err != nil {
+		fmt.Println("Error updating author tags categories: ", err)
 		utilities.Response(ctx, 500, false, nil, "Failed to update author tags categories")
 		return
 	}
 
 	err = s.postRepo.CreatePost(&post)
 	if err != nil {
+		fmt.Println("Error creating post: ", err)
 		utilities.Response(ctx, 500, false, nil, "Failed to create post")
 		return
 	}
@@ -236,12 +256,14 @@ func (s *PostService) GetPosts(ctx *gin.Context) {
 	var request dto.GetPostsRequest
 	err := ctx.ShouldBindQuery(&request)
 	if err != nil {
+		fmt.Println("Error binding query parameters: ", err)
 		utilities.Response(ctx, 400, false, nil, "Invalid request body")
 		return
 	}
 
 	posts, err := s.postRepo.GetPosts(userId, request.Platform, request.Tags, request.Authors, request.Categories)
 	if err != nil {
+		fmt.Println("Error getting posts: ", err)
 		utilities.Response(ctx, 500, false, nil, "Failed to get posts")
 		return
 	}
@@ -258,6 +280,7 @@ func (s *PostService) GetUserAuthors(ctx *gin.Context) {
 	}
 	authors, err := s.postRepo.GetUserAuthors(userId, platform)
 	if err != nil {
+		fmt.Println("Error getting user authors: ", err)
 		utilities.Response(ctx, 500, false, nil, "Failed to get user authors")
 		return
 	}
@@ -273,6 +296,7 @@ func (s *PostService) GetUserCategories(ctx *gin.Context) {
 	}
 	categories, err := s.postRepo.GetUserCategories(userId, platform)
 	if err != nil {
+		fmt.Println("Error getting user categories: ", err)
 		utilities.Response(ctx, 500, false, nil, "Failed to get user categories")
 		return
 	}
@@ -288,6 +312,7 @@ func (s *PostService) GetUserTags(ctx *gin.Context) {
 	}
 	tags, err := s.postRepo.GetUserTags(userId, platform)
 	if err != nil {
+		fmt.Println("Error getting user tags: ", err)
 		utilities.Response(ctx, 500, false, nil, "Failed to get user tags")
 		return
 	}
@@ -298,16 +323,19 @@ func (s *PostService) GetAllUserPostsTagsAndCategoriesCount(ctx *gin.Context) {
 	userId := ctx.GetInt64("user_id")
 	totalPostsCount, err := s.postRepo.GetAllUserPostsCount(userId)
 	if err != nil {
+		fmt.Println("Error getting all user posts count: ", err)
 		utilities.Response(ctx, 500, false, nil, "Failed to get all user posts count")
 		return
 	}
 	totalTagsCount, err := s.postRepo.GetAllTagsCount(userId)
 	if err != nil {
+		fmt.Println("Error getting all tags count: ", err)
 		utilities.Response(ctx, 500, false, nil, "Failed to get all tags count")
 		return
 	}
 	totalCategoriesCount, err := s.postRepo.GetAllCategoriesCount(userId)
 	if err != nil {
+		fmt.Println("Error getting all categories count: ", err)
 		utilities.Response(ctx, 500, false, nil, "Failed to get all categories count")
 		return
 	}
