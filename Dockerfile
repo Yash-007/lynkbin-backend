@@ -1,5 +1,5 @@
 # Use official Golang image with Debian
-FROM golang:1.24.4-alpine
+FROM golang:1.24.9-bookworm
 
 # Install Chromium dependencies
 RUN apt-get update && apt-get install -y \
