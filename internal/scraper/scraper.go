@@ -151,7 +151,7 @@ func ScrapeXPost(url string, proxy string) (ScrapedPost, error) {
 	defer pw.Stop()
 
 	launchOpts := playwright.BrowserTypeLaunchOptions{
-		Headless: playwright.Bool(false), // CRITICAL: Keep false to see what's happening
+		Headless: playwright.Bool(true), 
 		Args: []string{
 			"--disable-blink-features=AutomationControlled",
 			"--disable-dev-shm-usage",
