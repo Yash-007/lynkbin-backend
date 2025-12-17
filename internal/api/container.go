@@ -23,10 +23,10 @@ func NewContainer() *Container {
 	database := db.ConnectDB(dbUrl)
 
 	// Run migrations
-	if err := db.MigrateDB(database); err != nil {
-		fmt.Printf("failed to migrate database: %v\n", err)
-		return nil
-	}
+	// if err := db.MigrateDB(database); err != nil {
+	// 	fmt.Printf("failed to migrate database: %v\n", err)
+	// 	return nil
+	// }
 
 	geminiClient, err := gemini.NewGeminiClient("gemini-2.5-flash")
 	if err != nil {

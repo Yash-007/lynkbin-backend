@@ -242,7 +242,7 @@ func (s *PostService) CreatePost(ctx *gin.Context) {
 		return
 	}
 
-	postLink := fmt.Sprintf("https://lynkbin.com/%d/post/%s", post.UserId, platform)
+	postLink := fmt.Sprintf("https://lynkbin.vercel.app/dashboard?platform=%s", platform)
 	response := models.CreatePostResponse{
 		Post:     post,
 		PostLink: postLink,
