@@ -88,6 +88,7 @@ func (s *UserService) LoginUser(ctx *gin.Context) {
 	var request dto.LoginUserRequest
 	err := ctx.ShouldBindBodyWithJSON(&request)
 	if err != nil {
+		fmt.Println("Error binding request body: ", err)
 		utilities.Response(ctx, 400, false, nil, "Invalid request body")
 		return
 	}
@@ -110,6 +111,7 @@ func (s *UserService) LoginUser(ctx *gin.Context) {
 
 	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(request.Password))
 	if err != nil {
+		fmt.Println("Error comparing hash and password: ", err)
 		utilities.Response(ctx, 400, false, nil, "Invalid password")
 		return
 	}
@@ -139,6 +141,7 @@ func (s *UserService) GetCurrentUser(ctx *gin.Context) {
 	user, err := s.userRepo.GetUserById(userId.(int64))
 	user.Password = ""
 	if err != nil {
+		fmt.Println("Error getting user by id: ", err)
 		utilities.Response(ctx, 500, false, nil, "Failed to fetch user")
 		return
 	}
