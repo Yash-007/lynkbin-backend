@@ -45,6 +45,71 @@ func extractAuthorFromLinkedInURL(link string) string {
 	return author
 }
 
+func extractAuthorFromXPage(page playwright.Page, pageTitle string) string {
+	// Method 1: Try to get from DOM selectors (most reliable)
+	authorSelectors := []string{
+		"article[data-testid='tweet'] div[data-testid='User-Name'] a[role='link'] span",
+		"article[data-testid='tweet'] a[role='link'][href*='/'] span",
+		"div[data-testid='User-Name'] a span",
+		"a[role='link'] span[class*='css-1jxf684']",
+	}
+
+	for _, selector := range authorSelectors {
+		authorLocator := page.Locator(selector).First()
+		count, _ := authorLocator.Count()
+		if count > 0 {
+			authorText, err := authorLocator.TextContent()
+			if err == nil && authorText != "" {
+				authorText = strings.TrimSpace(authorText)
+				authorText = strings.TrimPrefix(authorText, "@")
+				if authorText != "" {
+					fmt.Printf("Extracted author from DOM: %s\n", authorText)
+					return authorText
+				}
+			}
+		}
+	}
+
+	// Method 2: Extract from page title (fallback)
+	// Expected format: "Author Name on X: tweet content"
+	if strings.Contains(pageTitle, " on X") {
+		parts := strings.Split(pageTitle, " on X")
+		if len(parts) > 0 {
+			author := strings.TrimSpace(parts[0])
+			// Remove quotes if present
+			author = strings.Trim(author, "\"'")
+			if author != "" {
+				fmt.Printf("Extracted author from title: %s\n", author)
+				return author
+			}
+		}
+	}
+
+	// Method 3: Try meta tags
+	metaAuthor, _ := page.Locator("meta[name='twitter:creator']").GetAttribute("content")
+	if metaAuthor != "" {
+		metaAuthor = strings.TrimPrefix(metaAuthor, "@")
+		fmt.Printf("Extracted author from meta: %s\n", metaAuthor)
+		return metaAuthor
+	}
+
+	// Method 4: Extract from URL
+	currentURL := page.URL()
+	if strings.Contains(currentURL, "x.com/") || strings.Contains(currentURL, "twitter.com/") {
+		u, err := url.Parse(currentURL)
+		if err == nil {
+			pathParts := strings.Split(strings.Trim(u.Path, "/"), "/")
+			if len(pathParts) > 0 && pathParts[0] != "" && pathParts[0] != "status" {
+				fmt.Printf("Extracted author from URL: %s\n", pathParts[0])
+				return pathParts[0]
+			}
+		}
+	}
+
+	fmt.Println("Warning: Could not extract author, using 'Unknown'")
+	return "Unknown"
+}
+
 func ScrapeLinkedInPost(url string, proxy string) (ScrapedPost, error) {
 	pw, err := playwright.Run()
 	if err != nil {
@@ -151,7 +216,7 @@ func ScrapeXPost(url string, proxy string) (ScrapedPost, error) {
 	defer pw.Stop()
 
 	launchOpts := playwright.BrowserTypeLaunchOptions{
-		Headless: playwright.Bool(true), 
+		Headless: playwright.Bool(true),
 		Args: []string{
 			"--disable-blink-features=AutomationControlled",
 			"--disable-dev-shm-usage",
@@ -275,9 +340,8 @@ func ScrapeXPost(url string, proxy string) (ScrapedPost, error) {
 	}
 
 	tweetText, _ := page.Locator("article[data-testid='tweet'] div[data-testid='tweetText']").First().TextContent()
-	// author, _ := page.Locator("div[class='css-146c3p1 r-bcqeeo r-1ttztb7 r-qvutc0 r-37j5jr r-a023e6 r-rjixqe r-b88u0q r-1awozwy r-6koalj r-1udh08x r-3s2u2q']").TextContent()
-	authorArray := strings.Split(title, "on X")
-	author := strings.TrimSpace(authorArray[0])
+
+	author := extractAuthorFromXPage(page, title)
 
 	post := ScrapedPost{
 		Content: strings.TrimSpace(tweetText),
