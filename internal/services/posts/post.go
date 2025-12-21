@@ -11,6 +11,7 @@ import (
 	"module/lynkbin/internal/scraper"
 	"module/lynkbin/internal/utilities"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -345,4 +346,38 @@ func (s *PostService) GetAllUserPostsTagsAndCategoriesCount(ctx *gin.Context) {
 		TotalCategoriesCount: totalCategoriesCount,
 	}
 	utilities.Response(ctx, 200, true, response, "All counts fetched successfully")
+}
+
+func (s *PostService) DeletePost(ctx *gin.Context) {
+	userId := ctx.GetInt64("user_id")
+
+	// Get post ID from URL parameter
+	postIdStr := ctx.Param("id")
+	if postIdStr == "" {
+		fmt.Println("Error: post ID is required")
+		utilities.Response(ctx, 400, false, nil, "Post ID is required")
+		return
+	}
+
+	// Convert string to int64
+	postId, err := strconv.ParseInt(postIdStr, 10, 64)
+	if err != nil {
+		fmt.Println("Error parsing post ID: ", err)
+		utilities.Response(ctx, 400, false, nil, "Invalid post ID")
+		return
+	}
+
+	// Delete the post
+	err = s.postRepo.DeletePost(userId, postId)
+	if err != nil {
+		fmt.Println("Error deleting post: ", err)
+		if err.Error() == "post not found or you don't have permission to delete it" {
+			utilities.Response(ctx, 404, false, nil, "Post not found or you don't have permission to delete it")
+			return
+		}
+		utilities.Response(ctx, 500, false, nil, "Failed to delete post")
+		return
+	}
+
+	utilities.Response(ctx, 200, true, nil, "Post deleted successfully")
 }

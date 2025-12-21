@@ -2,6 +2,7 @@ package repo
 
 import (
 	"errors"
+	"fmt"
 	"module/lynkbin/internal/models"
 	"slices"
 
@@ -264,4 +265,23 @@ func (r *PostRepo) GetAllCategoriesCount(userId int64) (int64, error) {
 		return 0, err
 	}
 	return count, nil
+}
+
+func (r *PostRepo) DeletePost(userId int64, postId int64) error {
+	// First verify the post belongs to the user
+	var post models.Post
+	err := r.DB.Where("id = ? AND user_id = ?", postId, userId).First(&post).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("post not found or you don't have permission to delete it")
+		}
+		return err
+	}
+
+	// Delete the post
+	err = r.DB.Where("id = ? AND user_id = ?", postId, userId).Delete(&models.Post{}).Error
+	if err != nil {
+		return err
+	}
+	return nil
 }

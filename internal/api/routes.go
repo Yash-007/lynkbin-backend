@@ -16,6 +16,7 @@ func RegisterRoutes(router *gin.RouterGroup, container *Container) {
 	postRoutes := router.Group("/posts")
 	postRoutes.POST("", middlewareService.AuthMiddleware, container.PostService.CreatePost)
 	postRoutes.GET("", middlewareService.AuthMiddleware, container.PostService.GetPosts)
+	postRoutes.DELETE("/:id", middlewareService.AuthMiddleware, container.PostService.DeletePost)
 	postRoutes.GET("/authors", middlewareService.AuthMiddleware, container.PostService.GetUserAuthors)
 	postRoutes.GET("/categories", middlewareService.AuthMiddleware, container.PostService.GetUserCategories)
 	postRoutes.GET("/tags", middlewareService.AuthMiddleware, container.PostService.GetUserTags)
