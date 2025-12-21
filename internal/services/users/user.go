@@ -71,7 +71,7 @@ func (s *UserService) RegisterUser(ctx *gin.Context) {
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user_id": int64(*newUser.Id),
-		"exp":     time.Now().Add(time.Hour * 24).Unix(),
+		"exp":     time.Now().Add(time.Hour * 720).Unix(),
 	})
 
 	signedToken, err := token.SignedString([]byte("secret_key"))
@@ -118,7 +118,7 @@ func (s *UserService) LoginUser(ctx *gin.Context) {
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user_id": int64(*user.Id),
-		"exp":     time.Now().Add(time.Hour * 24).Unix(),
+		"exp":     time.Now().Add(time.Hour * 720).Unix(),
 	})
 
 	signedToken, err := token.SignedString([]byte("secret_key"))
