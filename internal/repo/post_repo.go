@@ -285,3 +285,12 @@ func (r *PostRepo) DeletePost(userId int64, postId int64) error {
 	}
 	return nil
 }
+
+func (r *PostRepo) GetRecentPosts(userId int64) ([]models.Post, error) {
+	var posts []models.Post
+	err := r.DB.Where("user_id = ?", userId).Order("created_at DESC").Limit(5).Find(&posts).Error
+	if err != nil {
+		return nil, err
+	}
+	return posts, nil
+}

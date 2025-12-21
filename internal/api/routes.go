@@ -20,6 +20,7 @@ func RegisterRoutes(router *gin.RouterGroup, container *Container) {
 	postRoutes.GET("/authors", middlewareService.AuthMiddleware, container.PostService.GetUserAuthors)
 	postRoutes.GET("/categories", middlewareService.AuthMiddleware, container.PostService.GetUserCategories)
 	postRoutes.GET("/tags", middlewareService.AuthMiddleware, container.PostService.GetUserTags)
+	postRoutes.GET("/recent", middlewareService.AuthMiddleware, container.PostService.GetRecentPosts)
 
 	postRoutes.GET("/counts", middlewareService.AuthMiddleware, container.PostService.GetAllUserPostsTagsAndCategoriesCount)
 }
