@@ -1,6 +1,6 @@
 module module/lynkbin
 
-go 1.24.9
+go 1.24.4
 
 require (
 	github.com/gin-gonic/gin v1.11.0
@@ -11,6 +11,8 @@ require (
 	cloud.google.com/go v0.116.0 // indirect
 	cloud.google.com/go/auth v0.9.3 // indirect
 	cloud.google.com/go/compute/metadata v0.5.0 // indirect
+	github.com/PuerkitoBio/goquery v1.11.0 // indirect
+	github.com/andybalholm/cascadia v1.3.3 // indirect
 	github.com/bytedance/sonic v1.14.0 // indirect
 	github.com/bytedance/sonic/loader v0.3.0 // indirect
 	github.com/caarlos0/env/v11 v11.3.1 // indirect

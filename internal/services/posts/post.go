@@ -10,9 +10,11 @@ import (
 	"module/lynkbin/internal/repo"
 	"module/lynkbin/internal/scraper"
 	"module/lynkbin/internal/utilities"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
@@ -38,6 +40,8 @@ func (s *PostService) ExtractPostPlatform(userPost string, isUrl bool) (string, 
 		return "x", nil
 	} else if strings.Contains(userPost, "reddit.com") {
 		return "reddit", nil
+	} else if strings.Contains(userPost, "instagram.com") {
+		return "instagram", nil
 	} else {
 		return "others", nil
 	}
@@ -126,6 +130,30 @@ func (s *PostService) ExtractPostDetails(ctx *gin.Context, userPost string, plat
 		summary, err = s.SummarizePost(ctx, scrapedPost.Content, tags)
 		if err != nil {
 			fmt.Println("Error summarizing Reddit post: ", err)
+			return models.Post{}, err
+		}
+	} else if platform == "instagram" {
+		config := &scraper.InstagramScraperConfig{
+			OutputDir: "internal/scraper/downloads/instagram",
+			HTTPClient: &http.Client{
+				Timeout: 60 * time.Second,
+				Transport: &http.Transport{
+					Proxy: http.ProxyURL(&url.URL{
+						Scheme: "socks5",
+						Host:   "10.101.116.69:1088",
+					}),
+				},
+			},
+		}
+		scrapedPost, err = scraper.ScrapeInstagramReel(userPost, config)
+		if err != nil {
+			fmt.Println("Error scraping Instagram reel: ", err)
+			return models.Post{}, err
+		}
+		fmt.Printf("Scraped post: %+v\n", scrapedPost)
+		summary, err = s.SummarizePost(ctx, scrapedPost.Content, tags)
+		if err != nil {
+			fmt.Println("Error summarizing Instagram reel: ", err)
 			return models.Post{}, err
 		}
 	} else if platform == "others" {

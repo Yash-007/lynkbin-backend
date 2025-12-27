@@ -1,18 +1,26 @@
 package scraper
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
+	"time"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/playwright-community/playwright-go"
 )
 
 type ScrapedPost struct {
-	Author  string `json:"author"`
-	Content string `json:"content"`
-	Topic   string `json:"topic"`
+	Author   string `json:"author"`
+	Content  string `json:"content"`
+	Topic    string `json:"topic"`
+	VideoURL string `json:"video_url,omitempty"`
 }
 
 func extractAuthorFromLinkedInURL(link string) string {
@@ -531,4 +539,264 @@ func clean(s string) string {
 		return ""
 	}
 	return string([]byte(s))
+}
+
+// Instagram Scraper Implementation
+
+const (
+	instagramUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
+
+// InstagramScraperConfig holds configuration for Instagram scraping
+type InstagramScraperConfig struct {
+	Proxy      string
+	OutputDir  string
+	HTTPClient *http.Client
+}
+
+// ScrapeInstagramReel scrapes an Instagram reel and downloads the video
+func ScrapeInstagramReel(reelURL string, config *InstagramScraperConfig) (ScrapedPost, error) {
+	fmt.Println("Starting Instagram reel scraper...")
+
+	if config == nil {
+		config = &InstagramScraperConfig{}
+	}
+
+	if config.OutputDir == "" {
+		config.OutputDir = "internal/scraper/downloads/instagram"
+	}
+
+	if config.HTTPClient == nil {
+		config.HTTPClient = &http.Client{
+			Timeout: 30 * time.Second,
+		}
+	}
+
+	// Validate URL
+	if err := validateInstagramURL(reelURL); err != nil {
+		return ScrapedPost{}, err
+	}
+
+	fmt.Printf("📥 Fetching reel from: %s\n", reelURL)
+
+	// Fetch HTML
+	html, err := fetchInstagramHTML(config.HTTPClient, reelURL)
+	if err != nil {
+		return ScrapedPost{}, err
+	}
+
+	fmt.Println("✅ Successfully fetched page content")
+
+	// Extract video URL and metadata
+	videoURL, author, err := extractInstagramVideoData(html)
+	if err != nil {
+		return ScrapedPost{}, err
+	}
+
+	fmt.Printf("🎬 Found video URL\n")
+	fmt.Printf("👤 Author: %s\n", author)
+
+	// Generate unique filename
+	timestamp := time.Now().Unix()
+	filename := fmt.Sprintf("instagram_reel_%d.mp4", timestamp)
+	outputPath := filepath.Join(config.OutputDir, filename)
+
+	// Create output directory if it doesn't exist
+	if err := os.MkdirAll(config.OutputDir, 0755); err != nil {
+		return ScrapedPost{}, fmt.Errorf("failed to create output directory: %w", err)
+	}
+
+	// Download video
+	fmt.Printf("⬇️  Downloading video to: %s\n", outputPath)
+	if err := downloadInstagramVideo(config.HTTPClient, videoURL, outputPath); err != nil {
+		return ScrapedPost{}, err
+	}
+
+	content, err := os.ReadFile(outputPath)
+	if err != nil {
+		return ScrapedPost{}, fmt.Errorf("failed to read output file: %w", err)
+	}
+
+	fmt.Printf("✅ Successfully downloaded reel to: %s\n", outputPath)
+
+	return ScrapedPost{
+		Author:   clean(author),
+		Content:  string(content),
+		VideoURL: outputPath,
+	}, nil
+}
+
+// validateInstagramURL validates that the URL is a valid Instagram reel URL
+func validateInstagramURL(urlStr string) error {
+	parsedURL, err := url.Parse(urlStr)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+
+	if parsedURL.Host != "www.instagram.com" && parsedURL.Host != "instagram.com" {
+		return fmt.Errorf("not an Instagram URL")
+	}
+
+	if !strings.Contains(parsedURL.Path, "/reel/") && !strings.Contains(parsedURL.Path, "/p/") {
+		return fmt.Errorf("URL must be an Instagram reel or post")
+	}
+
+	return nil
+}
+
+// fetchInstagramHTML fetches the HTML content from Instagram
+func fetchInstagramHTML(client *http.Client, reelURL string) (string, error) {
+	req, err := http.NewRequest("GET", reelURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Set headers to mimic a real browser
+	req.Header.Set("User-Agent", instagramUserAgent)
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "none")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch URL: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("received non-200 status code: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	return string(body), nil
+}
+
+// extractInstagramVideoData extracts video URL and author from Instagram's embedded JSON
+func extractInstagramVideoData(html string) (videoURL, author string, err error) {
+	// Save HTML for debugging
+	debugPath := "internal/scraper/debug_instagram_response.html"
+	if err := os.WriteFile(debugPath, []byte(html), 0644); err == nil {
+		fmt.Printf("💾 Saved HTML to %s\n", debugPath)
+	}
+
+	// Method 1: Find video_versions in embedded JSON (new Instagram format)
+	videoPattern := regexp.MustCompile(`"video_versions":\[{"width":\d+,"height":\d+,"url":"([^"]+)"`)
+	videoMatches := videoPattern.FindStringSubmatch(html)
+	if len(videoMatches) > 1 {
+		videoURL = strings.ReplaceAll(videoMatches[1], `\/`, "/")
+	}
+
+	// Extract author name from og:title (e.g., "Name on Instagram:")
+	ogTitlePattern := regexp.MustCompile(`property="og:title" content="([^"]+) on Instagram:`)
+	ogTitleMatches := ogTitlePattern.FindStringSubmatch(html)
+	if len(ogTitleMatches) > 1 {
+		author = ogTitleMatches[1]
+		author = strings.ReplaceAll(author, "&amp;", "&")
+		author = strings.ReplaceAll(author, "&#064;", "@")
+	}
+
+	// Fallback 1: Try twitter:title
+	if author == "" {
+		twitterTitlePattern := regexp.MustCompile(`name="twitter:title" content="([^"]+) \(`)
+		twitterMatches := twitterTitlePattern.FindStringSubmatch(html)
+		if len(twitterMatches) > 1 {
+			author = twitterMatches[1]
+			author = strings.ReplaceAll(author, "&amp;", "&")
+		}
+	}
+
+	// Fallback 2: Extract username
+	if author == "" {
+		authorPattern := regexp.MustCompile(`"username":"([^"]+)"`)
+		authorMatches := authorPattern.FindStringSubmatch(html)
+		if len(authorMatches) > 1 {
+			author = authorMatches[1]
+		}
+	}
+
+	// Fallback 3: Extract from og:url meta tag
+	if author == "" {
+		ogURLPattern := regexp.MustCompile(`property="og:url" content="https://www\.instagram\.com/([^/]+)/`)
+		ogURLMatches := ogURLPattern.FindStringSubmatch(html)
+		if len(ogURLMatches) > 1 {
+			author = ogURLMatches[1]
+		}
+	}
+
+	// Method 2: Try application/ld+json if regex fails
+	if videoURL == "" {
+		doc, parseErr := goquery.NewDocumentFromReader(strings.NewReader(html))
+		if parseErr == nil {
+			doc.Find("script[type='application/ld+json']").Each(func(i int, s *goquery.Selection) {
+				jsonStr := s.Text()
+				var data map[string]interface{}
+				if jsonErr := json.Unmarshal([]byte(jsonStr), &data); jsonErr == nil {
+					if contentURL, ok := data["contentUrl"].(string); ok && videoURL == "" {
+						videoURL = contentURL
+					}
+					if authorData, ok := data["author"].(map[string]interface{}); ok && author == "" {
+						if authorName, ok := authorData["name"].(string); ok {
+							author = authorName
+						}
+					}
+				}
+			})
+		}
+	}
+
+	if videoURL == "" {
+		return "", "", fmt.Errorf("could not find video URL in the page")
+	}
+
+	if author == "" {
+		author = "Unknown"
+	}
+
+	return videoURL, author, nil
+}
+
+// downloadInstagramVideo downloads the video from the given URL
+func downloadInstagramVideo(client *http.Client, videoURL, outputPath string) error {
+	req, err := http.NewRequest("GET", videoURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create download request: %w", err)
+	}
+
+	req.Header.Set("User-Agent", instagramUserAgent)
+	req.Header.Set("Accept", "*/*")
+	req.Header.Set("Referer", "https://www.instagram.com/")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to download video: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("received non-200 status code while downloading: %d", resp.StatusCode)
+	}
+
+	// Create output file
+	file, err := os.Create(outputPath)
+	if err != nil {
+		return fmt.Errorf("failed to create output file: %w", err)
+	}
+	defer file.Close()
+
+	// Download with progress feedback
+	written, err := io.Copy(file, resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to write video to file: %w", err)
+	}
+
+	fmt.Printf("📊 Downloaded %d bytes\n", written)
+	return nil
 }
