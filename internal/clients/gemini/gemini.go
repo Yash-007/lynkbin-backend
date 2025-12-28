@@ -42,7 +42,7 @@ func (c *GeminiClient) GenerateContent(ctx context.Context, prompt string) (stri
 func (c *GeminiClient) GenerateContentWithMedia(ctx context.Context, prompt string, Media []dto.Media) (string, error) {
 	parts := []*genai.Part{}
 
-	for _, media := range Media {
+	for i, media := range Media {
 		mediaPath := media.Path
 		mimeType := detectMimeType(mediaPath)
 		file, err := os.Open(mediaPath)

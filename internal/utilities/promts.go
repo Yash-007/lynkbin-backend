@@ -62,13 +62,14 @@ Analyze the following post content and provide:
      * If existing tags are too generic, create MORE SPECIFIC alternatives
      * NEVER use generic tags like "Technology", "Business", "Career" alone
    - Be HIGHLY SPECIFIC and contextual to what makes THIS post unique
-   - Use simple, easy-to-understand terms (avoid complex vocabulary, but keep it professional and meaningful)
+   - Use casual, conversational language that people naturally use (avoid formal/corporate vocabulary)
+   - Keep tags relatable and easy to understand - think how friends would describe this content
    - GOOD Examples:
-     * ❌ "Career Development" → ✅ "Job Search", "Interview Tips", "Career Switch", "Resume Writing"
-     * ❌ "Technology" → ✅ "AI Tools", "Machine Learning", "Cloud Computing", "API Development"
-     * ❌ "Entrepreneurial Ventures" → ✅ "Startup Ideas", "Side Hustle", "Product Launch"
-     * ❌ "Marketing" → ✅ "Content Marketing", "SEO Strategy", "Email Campaigns"
-     * ❌ "Finance" → ✅ "Stock Trading", "Personal Budgeting", "Crypto Investment"
+     * ❌ "Career Development" → ✅ "Job Hunting", "Interview Prep", "Switching Jobs", "Resume Help"
+     * ❌ "Technology" → ✅ "AI Tools", "Coding Tips", "Tech Gadgets", "App Ideas"
+     * ❌ "Entrepreneurial Ventures" → ✅ "Startup Life", "Side Hustle", "Launching Products", "Building Business"
+     * ❌ "Marketing" → ✅ "Content Creation", "Growing Online", "Email Tips", "Social Media Growth"
+     * ❌ "Finance" → ✅ "Trading Stocks", "Saving Money", "Crypto Investing", "Budget Tips"
 
 4. **Description**: A concise 1-2 sentence summary of what the post is about
 
@@ -78,6 +79,7 @@ Post Content:
 IMPORTANT: 
 - BALANCE BOTH: Reuse existing tags when they are SPECIFIC and match the content perfectly
 - SPECIFICITY IS MANDATORY: Tags MUST be highly specific and contextual (never generic like "Technology" or "Business")
+- CASUAL LANGUAGE: Use casual, conversational terms instead of formal/professional language (e.g., "Job Hunting" not "Career Development", "Workout Tips" not "Physical Fitness Training")
 - If existing tags are too generic, create specific alternatives that better capture the post's unique content
 - CONSISTENCY MATTERS: Same posts should get same tags, so prefer reusing specific existing tags over creating synonyms
 - Respond with ONLY the raw JSON object, no markdown formatting, no code blocks, no additional text.
@@ -210,12 +212,14 @@ Analyze the media and provide:
      * NEVER use generic tags like "Video Content", "Social Media", "Entertainment" alone
    - Be HIGHLY SPECIFIC and contextual to what makes THIS media unique
    - Focus on the MAIN SUBJECT, ACTIVITY, or THEME shown in the media
+   - Use casual, relatable language that feels natural and conversational (avoid formal/professional vocabulary)
+   - Think how someone would casually describe this to a friend
    - GOOD Examples:
-     * ❌ "Fitness" → ✅ "Home Workout", "Yoga Practice", "Running Tips", "Strength Training"
-     * ❌ "Food" → ✅ "Pasta Recipe", "Healthy Breakfast", "Street Food", "Baking Tutorial"
-     * ❌ "Entertainment" → ✅ "Couple Comedy", "Dance Performance", "Music Cover", "Stand-up Comedy"
-     * ❌ "Travel" → ✅ "Beach Vacation", "City Tour", "Adventure Hiking", "Hotel Review"
-     * ❌ "Fashion" → ✅ "Outfit Ideas", "Makeup Tutorial", "Fashion Haul", "Styling Tips"
+     * ❌ "Fitness" → ✅ "Home Workouts", "Yoga Vibes", "Running Tips", "Gym Life"
+     * ❌ "Food" → ✅ "Pasta Recipes", "Breakfast Ideas", "Street Food", "Baking Fun"
+     * ❌ "Entertainment" → ✅ "Couple Goals", "Dance Moves", "Music Covers", "Comedy Skits"
+     * ❌ "Travel" → ✅ "Beach Trips", "City Exploring", "Mountain Adventures", "Travel Diaries"
+     * ❌ "Fashion" → ✅ "Outfit Inspo", "Makeup Looks", "Fashion Hauls", "Style Tips"
 
 4. **Description**: A concise 1-2 sentence summary describing what is shown in the media, including key visual elements, actions, or themes
 
@@ -224,6 +228,7 @@ IMPORTANT:
 - FOR MULTIPLE MEDIA: If analyzing multiple media files, provide ONE SINGLE combined response that represents all media together
 - BALANCE BOTH: Reuse existing tags when they are SPECIFIC and match the content perfectly
 - SPECIFICITY IS MANDATORY: Tags MUST be highly specific and contextual (never generic like "Video" or "Content")
+- CASUAL LANGUAGE: Use casual, conversational terms instead of formal/professional language (e.g., "Travel Vibes" not "Tourism Experience", "Workout Motivation" not "Physical Exercise Training")
 - If existing tags are too generic, create specific alternatives that better capture the media's unique content
 - CONSISTENCY MATTERS: Similar media should get similar tags, so prefer reusing specific existing tags over creating synonyms
 - Respond with ONLY the raw JSON object, no markdown formatting, no code blocks, no additional text.
