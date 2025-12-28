@@ -17,10 +17,10 @@ import (
 )
 
 type ScrapedPost struct {
-	Author   string `json:"author"`
-	Content  string `json:"content"`
-	Topic    string `json:"topic"`
-	VideoURL string `json:"video_url,omitempty"`
+	Author  string `json:"author"`
+	Content string `json:"content"`
+	Topic   string `json:"topic"`
+	Path    string `json:"path,omitempty"`
 }
 
 func extractAuthorFromLinkedInURL(link string) string {
@@ -563,7 +563,7 @@ func ScrapeInstagramReel(reelURL string, config *InstagramScraperConfig) (Scrape
 	}
 
 	if config.OutputDir == "" {
-		config.OutputDir = "internal/scraper/downloads/instagram"
+		config.OutputDir = fmt.Sprintf("downloads/instagram/%d", time.Now().Unix())
 	}
 
 	if config.HTTPClient == nil {
@@ -577,7 +577,7 @@ func ScrapeInstagramReel(reelURL string, config *InstagramScraperConfig) (Scrape
 		return ScrapedPost{}, err
 	}
 
-	fmt.Printf("📥 Fetching reel from: %s\n", reelURL)
+	fmt.Printf("Fetching reel from: %s\n", reelURL)
 
 	// Fetch HTML
 	html, err := fetchInstagramHTML(config.HTTPClient, reelURL)
@@ -585,7 +585,7 @@ func ScrapeInstagramReel(reelURL string, config *InstagramScraperConfig) (Scrape
 		return ScrapedPost{}, err
 	}
 
-	fmt.Println("✅ Successfully fetched page content")
+	fmt.Println("Successfully fetched page content")
 
 	// Extract video URL and metadata
 	videoURL, author, err := extractInstagramVideoData(html)
@@ -593,8 +593,8 @@ func ScrapeInstagramReel(reelURL string, config *InstagramScraperConfig) (Scrape
 		return ScrapedPost{}, err
 	}
 
-	fmt.Printf("🎬 Found video URL\n")
-	fmt.Printf("👤 Author: %s\n", author)
+	fmt.Printf("Found video URL\n")
+	fmt.Printf("Author: %s\n", author)
 
 	// Generate unique filename
 	timestamp := time.Now().Unix()
@@ -607,22 +607,16 @@ func ScrapeInstagramReel(reelURL string, config *InstagramScraperConfig) (Scrape
 	}
 
 	// Download video
-	fmt.Printf("⬇️  Downloading video to: %s\n", outputPath)
+	fmt.Printf("Downloading video to: %s\n", outputPath)
 	if err := downloadInstagramVideo(config.HTTPClient, videoURL, outputPath); err != nil {
 		return ScrapedPost{}, err
 	}
 
-	content, err := os.ReadFile(outputPath)
-	if err != nil {
-		return ScrapedPost{}, fmt.Errorf("failed to read output file: %w", err)
-	}
-
-	fmt.Printf("✅ Successfully downloaded reel to: %s\n", outputPath)
+	fmt.Printf("Successfully downloaded reel to: %s\n", outputPath)
 
 	return ScrapedPost{
-		Author:   clean(author),
-		Content:  string(content),
-		VideoURL: outputPath,
+		Author: clean(author),
+		Path:   outputPath,
 	}, nil
 }
 
@@ -682,10 +676,10 @@ func fetchInstagramHTML(client *http.Client, reelURL string) (string, error) {
 // extractInstagramVideoData extracts video URL and author from Instagram's embedded JSON
 func extractInstagramVideoData(html string) (videoURL, author string, err error) {
 	// Save HTML for debugging
-	debugPath := "internal/scraper/debug_instagram_response.html"
-	if err := os.WriteFile(debugPath, []byte(html), 0644); err == nil {
-		fmt.Printf("💾 Saved HTML to %s\n", debugPath)
-	}
+	// debugPath := "internal/scraper/debug_instagram_response.html"
+	// if err := os.WriteFile(debugPath, []byte(html), 0644); err == nil {
+	// 	fmt.Printf("Saved HTML to %s\n", debugPath)
+	// }
 
 	// Method 1: Find video_versions in embedded JSON (new Instagram format)
 	videoPattern := regexp.MustCompile(`"video_versions":\[{"width":\d+,"height":\d+,"url":"([^"]+)"`)
@@ -791,12 +785,12 @@ func downloadInstagramVideo(client *http.Client, videoURL, outputPath string) er
 	}
 	defer file.Close()
 
-	// Download with progress feedback
+	// Download video to file
 	written, err := io.Copy(file, resp.Body)
 	if err != nil {
 		return fmt.Errorf("failed to write video to file: %w", err)
 	}
 
-	fmt.Printf("📊 Downloaded %d bytes\n", written)
+	fmt.Printf("Downloaded %d bytes\n", written)
 	return nil
 }

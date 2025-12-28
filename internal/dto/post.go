@@ -28,3 +28,13 @@ type GetAllTagsAndCategoriesCountResponse struct {
 	TotalTagsCount       int64 `json:"total_tags_count"`
 	TotalCategoriesCount int64 `json:"total_categories_count"`
 }
+
+type Media struct {
+	Path    string `json:"path"`
+	Context string `json:"context"`
+}
+
+type MediaData struct {
+	IsMedia bool    `json:"is_media"`
+	Media   []Media `json:"media"`
+}

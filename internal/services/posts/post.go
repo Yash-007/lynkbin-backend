@@ -47,11 +47,11 @@ func (s *PostService) ExtractPostPlatform(userPost string, isUrl bool) (string, 
 	}
 }
 
-func (s *PostService) SummarizePost(ctx *gin.Context, content string, userTags []string) (dto.SummarizePostResponse, error) {
+func (s *PostService) GenerateTagsAndCategoriesData(userTags []string) (string, string, string, error) {
 	allTags, err := s.postRepo.GetAllTags()
 	if err != nil {
 		fmt.Println("Error getting all tags: ", err)
-		return dto.SummarizePostResponse{}, err
+		return "", "", "", err
 	}
 	tags := make([]string, len(allTags))
 	for i, tag := range allTags {
@@ -62,7 +62,7 @@ func (s *PostService) SummarizePost(ctx *gin.Context, content string, userTags [
 	allCategories, err := s.postRepo.GetAllCategories()
 	if err != nil {
 		fmt.Println("Error getting all categories: ", err)
-		return dto.SummarizePostResponse{}, err
+		return "", "", "", err
 	}
 	categories := make([]string, len(allCategories))
 	for i, category := range allCategories {
@@ -71,8 +71,27 @@ func (s *PostService) SummarizePost(ctx *gin.Context, content string, userTags [
 	categoryString := strings.Join(categories, ", ")
 
 	userTagsString := strings.Join(userTags, ", ")
-	prompt := utilities.GenerateCategorizationPrompt(content, tagString, categoryString, userTagsString)
-	summary, err := s.geminiClient.GenerateContent(context.Background(), prompt)
+	return tagString, categoryString, userTagsString, nil
+}
+
+func (s *PostService) SummarizePost(ctx *gin.Context, content string, userTags []string, MediaData dto.MediaData) (dto.SummarizePostResponse, error) {
+	tagString, categoryString, userTagsString, err := s.GenerateTagsAndCategoriesData(userTags)
+	if err != nil {
+		fmt.Println("Error generating tags and categories data: ", err)
+		return dto.SummarizePostResponse{}, err
+	}
+	prompt := ""
+	summary := ""
+
+	if MediaData.IsMedia {
+		prompt = utilities.GenerateMediaCategorizationPrompt(MediaData.Media, tagString, categoryString, userTagsString)
+		summary, err = s.geminiClient.GenerateContentWithMedia(context.Background(), prompt, MediaData.Media)
+
+	} else {
+		prompt = utilities.GenerateCategorizationPrompt(content, tagString, categoryString, userTagsString)
+		summary, err = s.geminiClient.GenerateContent(context.Background(), prompt)
+	}
+
 	if err != nil {
 		fmt.Println("Error generating content: ", err)
 		return dto.SummarizePostResponse{}, err
@@ -103,7 +122,7 @@ func (s *PostService) ExtractPostDetails(ctx *gin.Context, userPost string, plat
 			return models.Post{}, err
 		}
 
-		summary, err = s.SummarizePost(ctx, scrapedPost.Content, tags)
+		summary, err = s.SummarizePost(ctx, scrapedPost.Content, tags, dto.MediaData{IsMedia: false, Media: nil})
 		if err != nil {
 			fmt.Println("Error summarizing LinkedIn post: ", err)
 			return models.Post{}, err
@@ -115,7 +134,7 @@ func (s *PostService) ExtractPostDetails(ctx *gin.Context, userPost string, plat
 			fmt.Println("Error scraping X post: ", err)
 			return models.Post{}, err
 		}
-		summary, err = s.SummarizePost(ctx, scrapedPost.Content, tags)
+		summary, err = s.SummarizePost(ctx, scrapedPost.Content, tags, dto.MediaData{IsMedia: false, Media: nil})
 		if err != nil {
 			fmt.Println("Error summarizing X post: ", err)
 			return models.Post{}, err
@@ -127,22 +146,22 @@ func (s *PostService) ExtractPostDetails(ctx *gin.Context, userPost string, plat
 			fmt.Println("Error scraping Reddit post: ", err)
 			return models.Post{}, err
 		}
-		summary, err = s.SummarizePost(ctx, scrapedPost.Content, tags)
+		summary, err = s.SummarizePost(ctx, scrapedPost.Content, tags, dto.MediaData{IsMedia: false, Media: nil})
 		if err != nil {
 			fmt.Println("Error summarizing Reddit post: ", err)
 			return models.Post{}, err
 		}
 	} else if platform == "instagram" {
 		config := &scraper.InstagramScraperConfig{
-			OutputDir: "internal/scraper/downloads/instagram",
+			OutputDir: fmt.Sprintf("downloads/instagram/%d", time.Now().Unix()),
 			HTTPClient: &http.Client{
 				Timeout: 60 * time.Second,
-				Transport: &http.Transport{
-					Proxy: http.ProxyURL(&url.URL{
-						Scheme: "socks5",
-						Host:   "10.101.116.69:1088",
-					}),
-				},
+				// Transport: &http.Transport{
+				// 	Proxy: http.ProxyURL(&url.URL{
+				// 		Scheme: "socks5",
+				// 		Host:   "10.101.116.69:1088",
+				// 	}),
+				// },
 			},
 		}
 		scrapedPost, err = scraper.ScrapeInstagramReel(userPost, config)
@@ -151,7 +170,15 @@ func (s *PostService) ExtractPostDetails(ctx *gin.Context, userPost string, plat
 			return models.Post{}, err
 		}
 		fmt.Printf("Scraped post: %+v\n", scrapedPost)
-		summary, err = s.SummarizePost(ctx, scrapedPost.Content, tags)
+		summary, err = s.SummarizePost(ctx, "", tags, dto.MediaData{
+			IsMedia: true,
+			Media: []dto.Media{
+				{
+					Path:    scrapedPost.Path,
+					Context: "Reel",
+				},
+			},
+		})
 		if err != nil {
 			fmt.Println("Error summarizing Instagram reel: ", err)
 			return models.Post{}, err
@@ -159,7 +186,8 @@ func (s *PostService) ExtractPostDetails(ctx *gin.Context, userPost string, plat
 	} else if platform == "others" {
 		summary.Tags = pq.StringArray(tags)
 	} else if platform == "notes" {
-		summary, err = s.SummarizePost(ctx, userPost, tags)
+		summary, err = s.SummarizePost(ctx, userPost, tags, dto.MediaData{IsMedia: false, Media: nil})
+
 		if err != nil {
 			fmt.Println("Error summarizing notes: ", err)
 			return models.Post{}, err
