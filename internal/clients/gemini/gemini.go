@@ -57,6 +57,17 @@ func (c *GeminiClient) GenerateContentWithMedia(ctx context.Context, prompt stri
 		parts = append(parts, &genai.Part{
 			InlineData: &genai.Blob{MIMEType: mimeType, Data: mediaData},
 		})
+
+		if i == len(Media)-1 {
+			pathArray := strings.Split(mediaPath, "/")
+			pathArray = pathArray[:len(pathArray)-1]
+			folderPath := strings.Join(pathArray, "/")
+			fmt.Printf("folder path: %s\n", folderPath)
+			err = os.RemoveAll(folderPath)
+			if err != nil {
+				fmt.Printf("failed to remove folder: %v\n", err)
+			}
+		}
 	}
 
 	parts = append(parts, &genai.Part{
