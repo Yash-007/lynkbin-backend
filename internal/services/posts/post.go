@@ -113,6 +113,7 @@ func (s *PostService) SummarizePost(ctx *gin.Context, content string, userTags [
 func (s *PostService) ExtractPostDetails(ctx *gin.Context, userPost string, platform string, tags []string) (models.Post, error) {
 	var summary dto.SummarizePostResponse
 	var scrapedPost scraper.ScrapedPost
+	author := ""
 	var err error
 	if platform == "linkedin" {
 		// scrapedPost, err = scraper.ScrapeLinkedInPost(userPost, "socks5://10.101.116.69:1088")
@@ -121,7 +122,7 @@ func (s *PostService) ExtractPostDetails(ctx *gin.Context, userPost string, plat
 			fmt.Println("Error scraping LinkedIn post: ", err)
 			return models.Post{}, err
 		}
-
+		author = scrapedPost.Author
 		summary, err = s.SummarizePost(ctx, scrapedPost.Content, tags, dto.MediaData{IsMedia: false, Media: nil})
 		if err != nil {
 			fmt.Println("Error summarizing LinkedIn post: ", err)
@@ -134,6 +135,7 @@ func (s *PostService) ExtractPostDetails(ctx *gin.Context, userPost string, plat
 			fmt.Println("Error scraping X post: ", err)
 			return models.Post{}, err
 		}
+		author = scrapedPost.Author
 		summary, err = s.SummarizePost(ctx, scrapedPost.Content, tags, dto.MediaData{IsMedia: false, Media: nil})
 		if err != nil {
 			fmt.Println("Error summarizing X post: ", err)
@@ -146,6 +148,7 @@ func (s *PostService) ExtractPostDetails(ctx *gin.Context, userPost string, plat
 			fmt.Println("Error scraping Reddit post: ", err)
 			return models.Post{}, err
 		}
+		author = scrapedPost.Author
 		summary, err = s.SummarizePost(ctx, scrapedPost.Content, tags, dto.MediaData{IsMedia: false, Media: nil})
 		if err != nil {
 			fmt.Println("Error summarizing Reddit post: ", err)
@@ -164,23 +167,18 @@ func (s *PostService) ExtractPostDetails(ctx *gin.Context, userPost string, plat
 				// },
 			},
 		}
-		scrapedPost, err = scraper.ScrapeInstagramReel(userPost, config)
+		instagramScrapedPost, err := scraper.ScrapeInstagramPost(userPost, config)
 		if err != nil {
-			fmt.Println("Error scraping Instagram reel: ", err)
+			fmt.Println("Error scraping Instagram post: ", err)
 			return models.Post{}, err
 		}
-		fmt.Printf("Scraped post: %+v\n", scrapedPost)
+		author = instagramScrapedPost.Author
 		summary, err = s.SummarizePost(ctx, "", tags, dto.MediaData{
 			IsMedia: true,
-			Media: []dto.Media{
-				{
-					Path:    scrapedPost.Path,
-					Context: "Reel",
-				},
-			},
+			Media:   instagramScrapedPost.Data,
 		})
 		if err != nil {
-			fmt.Println("Error summarizing Instagram reel: ", err)
+			fmt.Println("Error summarizing Instagram post: ", err)
 			return models.Post{}, err
 		}
 	} else if platform == "others" {
@@ -199,7 +197,7 @@ func (s *PostService) ExtractPostDetails(ctx *gin.Context, userPost string, plat
 	post := models.Post{
 		UserId:      ctx.GetInt64("user_id"),
 		Data:        userPost,
-		Author:      scrapedPost.Author,
+		Author:      author,
 		Topic:       summary.Topic,
 		Platform:    platform,
 		Category:    summary.Category,

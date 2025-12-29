@@ -3,6 +3,7 @@ package scraper
 import (
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"net/http"
 	"net/url"
@@ -12,18 +13,24 @@ import (
 	"strings"
 	"time"
 
+	"module/lynkbin/internal/dto"
+
 	"github.com/PuerkitoBio/goquery"
 	"github.com/playwright-community/playwright-go"
 )
+
+type InstagramScrapedPost struct {
+	Author string      `json:"author"`
+	Data   []dto.Media `json:"data"`
+}
 
 type ScrapedPost struct {
 	Author  string `json:"author"`
 	Content string `json:"content"`
 	Topic   string `json:"topic"`
-	Path    string `json:"path,omitempty"`
 }
 
-func extractAuthorFromLinkedInURL(link string) string {
+func extractAuthorFromInstagramURL(link string) string {
 	u, err := url.Parse(link)
 	if err != nil {
 		return ""
@@ -554,9 +561,9 @@ type InstagramScraperConfig struct {
 	HTTPClient *http.Client
 }
 
-// ScrapeInstagramReel scrapes an Instagram reel and downloads the video
-func ScrapeInstagramReel(reelURL string, config *InstagramScraperConfig) (ScrapedPost, error) {
-	fmt.Println("Starting Instagram reel scraper...")
+// ScrapeInstagramPost scrapes an Instagram post and downloads the media
+func ScrapeInstagramPost(postURL string, config *InstagramScraperConfig) (InstagramScrapedPost, error) {
+	fmt.Println("Starting Instagram scraper...")
 
 	if config == nil {
 		config = &InstagramScraperConfig{}
@@ -573,24 +580,92 @@ func ScrapeInstagramReel(reelURL string, config *InstagramScraperConfig) (Scrape
 	}
 
 	// Validate URL
-	if err := validateInstagramURL(reelURL); err != nil {
-		return ScrapedPost{}, err
+	if err := validateInstagramURL(postURL); err != nil {
+		return InstagramScrapedPost{}, err
 	}
 
-	fmt.Printf("Fetching reel from: %s\n", reelURL)
+	fmt.Printf("Fetching from: %s\n", postURL)
 
 	// Fetch HTML
-	html, err := fetchInstagramHTML(config.HTTPClient, reelURL)
+	html, err := fetchInstagramHTML(config.HTTPClient, postURL)
 	if err != nil {
-		return ScrapedPost{}, err
+		return InstagramScrapedPost{}, err
 	}
 
 	fmt.Println("Successfully fetched page content")
 
-	// Extract video URL and metadata
-	videoURL, author, err := extractInstagramVideoData(html)
+	// Detect media type and extract accordingly
+	mediaType, err := detectInstagramMediaType(html)
 	if err != nil {
-		return ScrapedPost{}, err
+		return InstagramScrapedPost{}, err
+	}
+
+	fmt.Printf("Detected media type: %s\n", mediaType)
+
+	// Create output directory if it doesn't exist
+	if err := os.MkdirAll(config.OutputDir, 0755); err != nil {
+		return InstagramScrapedPost{}, fmt.Errorf("failed to create output directory: %w", err)
+	}
+
+	var scrapedPost InstagramScrapedPost
+
+	switch mediaType {
+	case "reel", "video":
+		scrapedPost, err = scrapeInstagramVideo(html, config)
+	case "image", "carousel":
+		scrapedPost, err = scrapeInstagramImages(html, config)
+	default:
+		return InstagramScrapedPost{}, fmt.Errorf("unsupported media type: %s", mediaType)
+	}
+
+	if err != nil {
+		return InstagramScrapedPost{}, err
+	}
+
+	fmt.Printf("Successfully scraped Instagram content\n")
+	return scrapedPost, nil
+}
+
+// detectInstagramMediaType detects whether the Instagram content is a video/reel or image/carousel
+func detectInstagramMediaType(htmlStr string) (string, error) {
+	productTypePattern := regexp.MustCompile(`"product_type":"([^"]+)"`)
+	productTypeMatches := productTypePattern.FindStringSubmatch(htmlStr)
+
+	if len(productTypeMatches) > 1 {
+		productType := productTypeMatches[1]
+		switch productType {
+		case "clips":
+			return "reel", nil
+		case "carousel_container":
+			return "carousel", nil
+		case "feed":
+			return "image", nil
+		default:
+			// Check if video_versions exists
+			if strings.Contains(htmlStr, `"video_versions":[{`) {
+				return "video", nil
+			}
+			return "image", nil
+		}
+	}
+
+	// Fallback: check for video or image indicators
+	if strings.Contains(htmlStr, `"video_versions":[{`) {
+		return "video", nil
+	}
+
+	if strings.Contains(htmlStr, `"image_versions2"`) {
+		return "image", nil
+	}
+
+	return "", fmt.Errorf("could not detect media type")
+}
+
+// scrapeInstagramVideo extracts and downloads a single video
+func scrapeInstagramVideo(htmlStr string, config *InstagramScraperConfig) (InstagramScrapedPost, error) {
+	videoURL, author, err := extractInstagramVideoData(htmlStr)
+	if err != nil {
+		return InstagramScrapedPost{}, err
 	}
 
 	fmt.Printf("Found video URL\n")
@@ -598,29 +673,222 @@ func ScrapeInstagramReel(reelURL string, config *InstagramScraperConfig) (Scrape
 
 	// Generate unique filename
 	timestamp := time.Now().Unix()
-	filename := fmt.Sprintf("instagram_reel_%d.mp4", timestamp)
+	filename := fmt.Sprintf("instagram_video_%d.mp4", timestamp)
 	outputPath := filepath.Join(config.OutputDir, filename)
-
-	// Create output directory if it doesn't exist
-	if err := os.MkdirAll(config.OutputDir, 0755); err != nil {
-		return ScrapedPost{}, fmt.Errorf("failed to create output directory: %w", err)
-	}
 
 	// Download video
 	fmt.Printf("Downloading video to: %s\n", outputPath)
 	if err := downloadInstagramVideo(config.HTTPClient, videoURL, outputPath); err != nil {
-		return ScrapedPost{}, err
+		return InstagramScrapedPost{}, err
 	}
 
-	fmt.Printf("Successfully downloaded reel to: %s\n", outputPath)
+	fmt.Printf("Successfully downloaded video\n")
 
-	return ScrapedPost{
+	return InstagramScrapedPost{
 		Author: clean(author),
-		Path:   outputPath,
+		Data: []dto.Media{
+			{
+				Path:    outputPath,
+				Context: "Reel",
+			},
+		},
 	}, nil
 }
 
-// validateInstagramURL validates that the URL is a valid Instagram reel URL
+// scrapeInstagramImages extracts and downloads images (single or carousel)
+func scrapeInstagramImages(htmlStr string, config *InstagramScraperConfig) (InstagramScrapedPost, error) {
+	// debugPath := "debug_instagram_images.html"
+	// if err := os.WriteFile(debugPath, []byte(htmlStr), 0644); err == nil {
+	// 	fmt.Printf("Saved HTML to %s\n", debugPath)
+	// } else {
+	// 	fmt.Printf("Error saving HTML to %s: %v\n", debugPath, err)
+	// }
+
+	author, err := extractInstagramAuthor(htmlStr)
+	if err != nil {
+		fmt.Printf("Warning: Could not extract author: %v\n", err)
+		author = "Unknown"
+	}
+
+	fmt.Printf("Author: %s\n", author)
+
+	// Check if it's a carousel
+	carouselPattern := regexp.MustCompile(`"carousel_media":\[(.*?)\],"location":`)
+	carouselMatches := carouselPattern.FindStringSubmatch(htmlStr)
+
+	var imageURLs []string
+
+	fmt.Println("Length of carousel matches: ", len(carouselMatches))
+	if len(carouselMatches) > 1 {
+		// It's a carousel - extract multiple images
+		fmt.Println("Detected carousel with multiple images")
+		imageURLs, err = extractCarouselImageURLs(htmlStr)
+		if err != nil {
+			return InstagramScrapedPost{}, err
+		}
+	} else {
+		// Single image post
+		fmt.Println("Detected single image post")
+		imageURL, err := extractSingleImageURL(htmlStr)
+		if err != nil {
+			return InstagramScrapedPost{}, err
+		}
+		imageURLs = []string{imageURL}
+	}
+
+	fmt.Printf("Found %d image(s) to download\n", len(imageURLs))
+
+	var data []dto.Media
+	// Download all images
+	timestamp := time.Now().Unix()
+
+	for i, imageURL := range imageURLs {
+		filename := fmt.Sprintf("instagram_image_%d_%d.jpg", timestamp, i+1)
+		outputPath := filepath.Join(config.OutputDir, filename)
+
+		fmt.Printf("Downloading image %d/%d to: %s\n", i+1, len(imageURLs), outputPath)
+		if err := downloadInstagramImage(config.HTTPClient, imageURL, outputPath); err != nil {
+			fmt.Printf("Warning: Failed to download image %d: %v\n", i+1, err)
+			continue
+		}
+
+		data = append(data, dto.Media{
+			Path:    outputPath,
+			Context: "Image",
+		})
+
+	}
+
+	if len(data) == 0 {
+		return InstagramScrapedPost{}, fmt.Errorf("failed to download any images")
+	}
+
+	fmt.Printf("Successfully downloaded %d image(s)\n", len(data))
+
+	// For now, return the first image path, but we'll need to update this to handle multiple paths
+	return InstagramScrapedPost{
+		Author: clean(author),
+		Data:   data,
+	}, nil
+}
+
+// extractInstagramAuthor extracts the author name from Instagram HTML
+func extractInstagramAuthor(htmlStr string) (string, error) {
+	// Method 1: Extract from og:title
+	ogTitlePattern := regexp.MustCompile(`property="og:title" content="([^"]+) on Instagram:`)
+	ogTitleMatches := ogTitlePattern.FindStringSubmatch(htmlStr)
+	if len(ogTitleMatches) > 1 {
+		return html.UnescapeString(ogTitleMatches[1]), nil
+	}
+
+	// Method 2: Extract from twitter:title
+	twitterTitlePattern := regexp.MustCompile(`name="twitter:title" content="([^"]+) \(@"`)
+	twitterTitleMatches := twitterTitlePattern.FindStringSubmatch(htmlStr)
+	if len(twitterTitleMatches) > 1 {
+		return html.UnescapeString(twitterTitleMatches[1]), nil
+	}
+
+	// Method 3: Extract from JSON username field
+	usernamePattern := regexp.MustCompile(`"username":"([^"]+)"`)
+	usernameMatches := usernamePattern.FindStringSubmatch(htmlStr)
+	if len(usernameMatches) > 1 {
+		return usernameMatches[1], nil
+	}
+
+	return "Unknown", fmt.Errorf("could not extract author")
+}
+
+// extractCarouselImageURLs extracts all image URLs from a carousel post
+func extractCarouselImageURLs(htmlStr string) ([]string, error) {
+	var imageURLs []string
+
+	// Pattern to find all image candidates in carousel_media
+	imagePattern := regexp.MustCompile(`"image_versions2":\{"candidates":\[\{"url":"([^"]+)"`)
+	matches := imagePattern.FindAllStringSubmatch(htmlStr, -1)
+
+	if len(matches) == 0 {
+		return nil, fmt.Errorf("could not find image URLs in carousel")
+	}
+
+	// Extract unique URLs (first occurrence of each image)
+	seen := make(map[string]bool)
+	for _, match := range matches {
+		if len(match) > 1 {
+			imgURL := strings.ReplaceAll(match[1], `\/`, "/")
+			imgURL = html.UnescapeString(imgURL)
+
+			// Only add if we haven't seen this URL before
+			if !seen[imgURL] {
+				imageURLs = append(imageURLs, imgURL)
+				seen[imgURL] = true
+			}
+		}
+	}
+
+	if len(imageURLs) == 0 {
+		return nil, fmt.Errorf("no valid image URLs found in carousel")
+	}
+
+	return imageURLs, nil
+}
+
+// extractSingleImageURL extracts a single image URL from a post
+func extractSingleImageURL(htmlStr string) (string, error) {
+	imagePattern := regexp.MustCompile(`"image_versions2":\{"candidates":\[\{"url":"([^"]+)"`)
+	imageMatches := imagePattern.FindStringSubmatch(htmlStr)
+
+	if len(imageMatches) > 1 {
+		imageURL := strings.ReplaceAll(imageMatches[1], `\/`, "/")
+		return html.UnescapeString(imageURL), nil
+	}
+
+	// Try og:image as fallback
+	ogImagePattern := regexp.MustCompile(`property="og:image" content="([^"]+)"`)
+	ogImageMatches := ogImagePattern.FindStringSubmatch(htmlStr)
+	if len(ogImageMatches) > 1 {
+		return html.UnescapeString(ogImageMatches[1]), nil
+	}
+
+	return "", fmt.Errorf("could not find image URL")
+}
+
+// downloadInstagramImage downloads an image from Instagram
+func downloadInstagramImage(client *http.Client, imageURL, outputPath string) error {
+	req, err := http.NewRequest("GET", imageURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("User-Agent", instagramUserAgent)
+	req.Header.Set("Accept", "image/webp,image/apng,image/*,*/*;q=0.8")
+	req.Header.Set("Referer", "https://www.instagram.com/")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to download image: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to download image: status code %d", resp.StatusCode)
+	}
+
+	file, err := os.Create(outputPath)
+	if err != nil {
+		return fmt.Errorf("failed to create file: %w", err)
+	}
+	defer file.Close()
+
+	bytesWritten, err := io.Copy(file, resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to write image: %w", err)
+	}
+
+	fmt.Printf("Downloaded %d bytes\n", bytesWritten)
+	return nil
+}
+
+// validateInstagramURL validates that the URL is a valid Instagram reel or post URL
 func validateInstagramURL(urlStr string) error {
 	parsedURL, err := url.Parse(urlStr)
 	if err != nil {
@@ -676,9 +944,11 @@ func fetchInstagramHTML(client *http.Client, reelURL string) (string, error) {
 // extractInstagramVideoData extracts video URL and author from Instagram's embedded JSON
 func extractInstagramVideoData(html string) (videoURL, author string, err error) {
 	// Save HTML for debugging
-	// debugPath := "internal/scraper/debug_instagram_response.html"
+	// debugPath := "debug_instagram_video.html"
 	// if err := os.WriteFile(debugPath, []byte(html), 0644); err == nil {
 	// 	fmt.Printf("Saved HTML to %s\n", debugPath)
+	// } else {
+	// 	fmt.Printf("Error saving HTML to %s: %v\n", debugPath, err)
 	// }
 
 	// Method 1: Find video_versions in embedded JSON (new Instagram format)
@@ -688,41 +958,9 @@ func extractInstagramVideoData(html string) (videoURL, author string, err error)
 		videoURL = strings.ReplaceAll(videoMatches[1], `\/`, "/")
 	}
 
-	// Extract author name from og:title (e.g., "Name on Instagram:")
-	ogTitlePattern := regexp.MustCompile(`property="og:title" content="([^"]+) on Instagram:`)
-	ogTitleMatches := ogTitlePattern.FindStringSubmatch(html)
-	if len(ogTitleMatches) > 1 {
-		author = ogTitleMatches[1]
-		author = strings.ReplaceAll(author, "&amp;", "&")
-		author = strings.ReplaceAll(author, "&#064;", "@")
-	}
-
-	// Fallback 1: Try twitter:title
-	if author == "" {
-		twitterTitlePattern := regexp.MustCompile(`name="twitter:title" content="([^"]+) \(`)
-		twitterMatches := twitterTitlePattern.FindStringSubmatch(html)
-		if len(twitterMatches) > 1 {
-			author = twitterMatches[1]
-			author = strings.ReplaceAll(author, "&amp;", "&")
-		}
-	}
-
-	// Fallback 2: Extract username
-	if author == "" {
-		authorPattern := regexp.MustCompile(`"username":"([^"]+)"`)
-		authorMatches := authorPattern.FindStringSubmatch(html)
-		if len(authorMatches) > 1 {
-			author = authorMatches[1]
-		}
-	}
-
-	// Fallback 3: Extract from og:url meta tag
-	if author == "" {
-		ogURLPattern := regexp.MustCompile(`property="og:url" content="https://www\.instagram\.com/([^/]+)/`)
-		ogURLMatches := ogURLPattern.FindStringSubmatch(html)
-		if len(ogURLMatches) > 1 {
-			author = ogURLMatches[1]
-		}
+	author, err = extractInstagramAuthor(html)
+	if err != nil {
+		author = "Unknown"
 	}
 
 	// Method 2: Try application/ld+json if regex fails
